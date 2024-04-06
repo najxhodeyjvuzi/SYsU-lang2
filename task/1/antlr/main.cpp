@@ -6,6 +6,7 @@
 // 映射定义，将ANTLR的tokenTypeName映射到clang的格式
 std::unordered_map<std::string, std::string> tokenTypeMapping = {
   { "Int", "int" },
+  { "Void", "void" },
   { "Identifier", "identifier" },
   { "LeftParen", "l_paren" },
   { "RightParen", "r_paren" },
@@ -20,9 +21,38 @@ std::unordered_map<std::string, std::string> tokenTypeMapping = {
   { "Equal", "equal" },
   { "Plus", "plus" },
   { "Comma", "comma" },
+  { "LineAfterPreprocessing", "LAP" },
+  { "Whitespace", "WS" },
+  { "Newline", "NL" }, 
+  { "Const", "const" },
+  { "Minus", "minus" },
+  { "Star", "star" },
+  { "Slash", "slash" },
+  { "Percent", "percent" },
+  { "If", "if" },
+  { "While", "while" },
+  { "Break", "break" },
+  { "Continue", "continue" },
+  { "Less", "less" },
+  { "Equalequal", "equalequal" },
+  { "Ampamp", "ampamp" },
+  { "Lessequal", "lessequal" },
+  { "Pipepipe", "pipepipe" },
+  { "Exclaimequal", "exclaimequal" },
+  { "Exclaim", "exclaim" },
+  { "Greater", "greater"},
+  { "Else", "else"},
+  { "Greaterequal", "greaterequal"},
+
+
 
   // 在这里继续添加其他映射
 };
+
+int Line = 0;
+std::string fileInfo = "";
+bool startOfLine = true;
+bool leadingSpace = false;
 
 void
 print_token(const antlr4::Token* token,
@@ -41,21 +71,61 @@ print_token(const antlr4::Token* token,
   if (tokenTypeMapping.find(tokenTypeName) != tokenTypeMapping.end()) {
     tokenTypeName = tokenTypeMapping[tokenTypeName];
   }
-  std::string locInfo = " Loc=<0:0>";
 
-  bool startOfLine = false;
-  bool leadingSpace = false;
+  if (tokenTypeName == "LAP") {
+    fileInfo = "";
+    int flag = 0;
+    std::string content = token->getText();
+
+    for (std::int64_t i = 0; i < content.size(); i++)
+    {
+
+      // extract Line number
+      if (content[i] == '#') {
+        Line = 0;
+        for (int j = i + 1; j < content.size() && content[j] != '\"'; j++) {
+          if ( ! (content[j] >= '0' && content[j] <= '9') ) continue;
+          Line = Line * 10 + int (content[j]) - 48;
+        }
+        Line -= 1;
+      }
+
+      // extract location
+      if (content[i] == '\"') { flag = ( flag + 1 ) % 2; continue; }
+      if ( flag == 1 ) fileInfo += content[i]; 
+    }
+    return;
+  }
+
+  std::int64_t pos = token->getCharPositionInLine();
+  // std::string locInfo = " Loc=<0:0>";
+
+  if (tokenTypeName == "WS") {
+    leadingSpace = true;
+    return;
+  }
+
+  if (tokenTypeName == "NL") {
+    startOfLine = true;
+    Line += 1;
+    return;
+  }
 
   if (token->getText() != "<EOF>")
     outFile << tokenTypeName << " '" << token->getText() << "'";
   else
     outFile << tokenTypeName << " '"
             << "'";
-  if (startOfLine)
+  if (startOfLine) {
     outFile << "\t [StartOfLine]";
-  if (leadingSpace)
+    startOfLine = false;
+  }
+  if (leadingSpace) {
     outFile << " [LeadingSpace]";
-  outFile << locInfo << std::endl;
+    leadingSpace = false;
+  }
+
+  outFile << " Loc=<" << fileInfo << ":" << Line << ":" << pos + 1 << ">" << std::endl;
 }
 
 int
