@@ -24,8 +24,19 @@ unaryOperator
     :   Plus | Minus
     ;
 
+parenExpression
+    :   LeftParen additiveExpression RightParen
+    |   unaryExpression
+    ;
+
+multiplicativeExpression
+    :   multiplicativeExpression (Star|Slash|Percent) parenExpression
+    |   parenExpression
+    ;
+
 additiveExpression
-    :   unaryExpression ((Plus|Minus) unaryExpression)*
+    :   additiveExpression (Plus|Minus) multiplicativeExpression
+    |   multiplicativeExpression
     ;
 
 
@@ -62,6 +73,7 @@ initDeclarator
 
 typeSpecifier
     :   Int
+    |   Const Int
     ;
 
 

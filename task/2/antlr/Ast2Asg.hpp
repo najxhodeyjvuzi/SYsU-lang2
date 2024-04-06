@@ -44,6 +44,10 @@ public:
 
   Expr* operator()(ast::AdditiveExpressionContext* ctx);
 
+  Expr* operator()(ast::MultiplicativeExpressionContext* ctx);
+
+  Expr* operator()(ast::ParenExpressionContext* ctx);
+
   Expr* operator()(ast::UnaryExpressionContext* ctx);
 
   Expr* operator()(ast::PostfixExpressionContext* ctx);
