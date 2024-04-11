@@ -4,8 +4,13 @@ options {
   tokenVocab=SYsULexer;
 }
 
+arrayExpression
+    :   arrayExpression LeftBracket assignmentExpression RightBracket
+    |   Identifier
+    ;
+
 primaryExpression
-    :   Identifier
+    :   arrayExpression
     |   Constant
     ;
 
@@ -40,8 +45,19 @@ additiveExpression
     ;
 
 
+conditionExpression
+    :   conditionExpression (Exclaimequal|Equalequal|Less|Lessequal|Greater|Greaterequal) additiveExpression
+    |   additiveExpression
+    ;
+
+logicExpression
+    :   logicExpression (Ampamp|Pipepipe) conditionExpression
+    |   conditionExpression
+    ;
+
 assignmentExpression
-    :   additiveExpression
+    :   logicExpression
+    // :   additiveExpression
     |   unaryExpression Equal assignmentExpression
     ;
 
@@ -100,10 +116,16 @@ initializerList
     :   initializer (Comma initializer)*
     ;
 
+
+ifStatement
+    :   If LeftParen assignmentExpression RightParen statement (Else statement)?
+    ;
+
 statement
     :   compoundStatement
     |   expressionStatement
     |   jumpStatement
+    |   ifStatement
     ;
 
 compoundStatement

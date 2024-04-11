@@ -76,7 +76,8 @@ Ast2Asg::operator()(ast::DeclarationSpecifiersContext* ctx)
 
   for (auto&& i : ctx->declarationSpecifier()) {
     if (auto p = i->typeSpecifier()) {
-      if (p->Const()) ret.second.const_ = true;
+      if (p->Const())
+        ret.second.const_ = true;
       if (ret.first == Type::Spec::kINVALID) {
         if (p->Int())
           ret.first = Type::Spec::kInt;
@@ -212,7 +213,8 @@ Ast2Asg::operator()(ast::ExpressionContext* ctx)
 Expr*
 Ast2Asg::operator()(ast::AssignmentExpressionContext* ctx)
 {
-  if (auto p = ctx->additiveExpression())
+  // if (auto p = ctx->additiveExpression())
+  if (auto p = ctx -> logicExpression())
     return self(p);
 
   auto ret = make<BinaryExpr>();
@@ -221,12 +223,102 @@ Ast2Asg::operator()(ast::AssignmentExpressionContext* ctx)
   ret->rht = self(ctx->assignmentExpression());
   return ret;
 }
+Expr* Ast2Asg::operator()(ast::ConditionExpressionContext* ctx)
+{
+  auto children = ctx->children;
+  if (children.size() == 1)
+    return self(
+      dynamic_cast<ast::AdditiveExpressionContext*>(children[0]));
+
+  Expr* ret = self(dynamic_cast<ast::ConditionExpressionContext*>(children[0]));
+
+  for (unsigned i = 1; i < children.size(); ++i) {
+    auto node = make<BinaryExpr>();
+
+    auto token = dynamic_cast<antlr4::tree::TerminalNode*>(children[i])
+                   ->getSymbol()
+                   ->getType();
+    switch (token) {
+      case ast::Equalequal:
+        node->op = node->kEq;
+        break;
+
+      case ast::Less:
+        node->op = node->kLt;
+        break;
+      
+      case ast::Lessequal:
+        node->op = node->kLe;
+        break;
+      
+      case ast::Greater:
+        node->op = node->kGt;
+        break;
+
+      case ast::Greaterequal:
+        node->op = node->kGe;
+        break;
+      
+      case ast::Exclaimequal:
+        node->op = node->kNe;
+        break;
+
+      default:
+        ABORT();
+    }
+
+    node->lft = ret;
+    node->rht =
+      self(dynamic_cast<ast::AdditiveExpressionContext*>(children[++i]));
+    ret = node;
+  }
+
+  return ret;
+}
+Expr* Ast2Asg::operator()(ast::LogicExpressionContext* ctx)
+{
+  auto children = ctx->children;
+  if (children.size() == 1)
+    return self(
+      dynamic_cast<ast::ConditionExpressionContext*>(children[0]));
+
+  Expr* ret = self(dynamic_cast<ast::LogicExpressionContext*>(children[0]));
+
+  for (unsigned i = 1; i < children.size(); ++i) {
+    auto node = make<BinaryExpr>();
+
+    auto token = dynamic_cast<antlr4::tree::TerminalNode*>(children[i])
+                   ->getSymbol()
+                   ->getType();
+    switch (token) {
+      case ast::Ampamp:
+        node->op = node->kAnd;
+        break;
+
+      case ast::Pipepipe:
+        node->op = node->kOr;
+        break;
+
+      default:
+        ABORT();
+    }
+
+    node->lft = ret;
+    node->rht =
+      self(dynamic_cast<ast::ConditionExpressionContext*>(children[++i]));
+    ret = node;
+  }
+
+  return ret;
+}
+
 Expr*
 Ast2Asg::operator()(ast::AdditiveExpressionContext* ctx)
 {
   auto children = ctx->children;
   if (children.size() == 1)
-    return self(dynamic_cast<ast::MultiplicativeExpressionContext*>(children[0]));
+    return self(
+      dynamic_cast<ast::MultiplicativeExpressionContext*>(children[0]));
 
   Expr* ret = self(dynamic_cast<ast::AdditiveExpressionContext*>(children[0]));
 
@@ -250,7 +342,8 @@ Ast2Asg::operator()(ast::AdditiveExpressionContext* ctx)
     }
 
     node->lft = ret;
-    node->rht = self(dynamic_cast<ast::MultiplicativeExpressionContext*>(children[++i]));
+    node->rht =
+      self(dynamic_cast<ast::MultiplicativeExpressionContext*>(children[++i]));
     ret = node;
   }
 
@@ -264,7 +357,8 @@ Ast2Asg::operator()(ast::MultiplicativeExpressionContext* ctx)
   if (children.size() == 1)
     return self(dynamic_cast<ast::ParenExpressionContext*>(children[0]));
 
-  Expr* ret = self(dynamic_cast<ast::MultiplicativeExpressionContext*>(children[0]));
+  Expr* ret =
+    self(dynamic_cast<ast::MultiplicativeExpressionContext*>(children[0]));
 
   for (unsigned i = 1; i < children.size(); ++i) {
     auto node = make<BinaryExpr>();
@@ -280,7 +374,7 @@ Ast2Asg::operator()(ast::MultiplicativeExpressionContext* ctx)
       case ast::Slash:
         node->op = node->kDiv;
         break;
-      
+
       case ast::Percent:
         node->op = node->kMod;
         break;
@@ -297,18 +391,17 @@ Ast2Asg::operator()(ast::MultiplicativeExpressionContext* ctx)
   return ret;
 }
 
-Expr* Ast2Asg::operator()(ast::ParenExpressionContext* ctx)
+Expr*
+Ast2Asg::operator()(ast::ParenExpressionContext* ctx)
 {
   auto children = ctx->children;
   if (ctx->unaryExpression())
     return self(ctx->unaryExpression());
-  
-  auto ret = make <ParenExpr>();
+
+  auto ret = make<ParenExpr>();
   ret->sub = self(dynamic_cast<ast::AdditiveExpressionContext*>(children[1]));
   return ret;
-
 }
-
 
 Expr*
 Ast2Asg::operator()(ast::UnaryExpressionContext* ctx)
@@ -347,16 +440,36 @@ Ast2Asg::operator()(ast::PostfixExpressionContext* ctx)
   return sub;
 }
 
-Expr*
-Ast2Asg::operator()(ast::PrimaryExpressionContext* ctx)
+Expr* Ast2Asg::operator()(ast::ArrayExpressionContext* ctx)
 {
-
   if (auto p = ctx->Identifier()) {
     auto name = p->getText();
     auto ret = make<DeclRefExpr>();
     ret->decl = mSymtbl->resolve(name);
     return ret;
   }
+
+  if (auto p = ctx->LeftBracket()) {
+    auto ret = make<BinaryExpr>();
+    ret->op = ret->kIndex;
+    ret ->lft = self(ctx->arrayExpression());
+    ret ->rht = self(ctx->assignmentExpression());
+    return ret;
+  }
+}
+
+Expr*
+Ast2Asg::operator()(ast::PrimaryExpressionContext* ctx)
+{
+  if (auto p = ctx->arrayExpression())
+    return self(p);
+
+  // if (auto p = ctx->Identifier()) {
+  //   auto name = p->getText();
+  //   auto ret = make<DeclRefExpr>();
+  //   ret->decl = mSymtbl->resolve(name);
+  //   return ret;
+  // }
 
   if (auto p = ctx->Constant()) {
     auto text = p->getText();
@@ -413,6 +526,10 @@ Ast2Asg::operator()(ast::InitializerContext* ctx)
 Stmt*
 Ast2Asg::operator()(ast::StatementContext* ctx)
 {
+
+  if (auto p = ctx->ifStatement())
+    return self(p);
+
   if (auto p = ctx->compoundStatement())
     return self(p);
 
@@ -423,6 +540,35 @@ Ast2Asg::operator()(ast::StatementContext* ctx)
     return self(p);
 
   ABORT();
+}
+
+Stmt* Ast2Asg::operator()(ast::IfStatementContext* ctx) {
+  auto ret = make<IfStmt>();
+
+  auto children = ctx->children;
+
+  for (auto i = 0; i<children.size(); i++) {
+    auto token = dynamic_cast<antlr4::tree::TerminalNode*>(children[i])
+                      ->getSymbol()
+                      ->getType();
+        switch (token) {
+          case ast::LeftParen:
+            ret->cond = self(dynamic_cast<ast::AssignmentExpressionContext*>(children[++i]));
+            break;
+
+          case ast::RightParen:
+            ret->then = self(dynamic_cast<ast::StatementContext*>(children[++i]));
+            break;
+
+          case ast::Else:
+            ret->else_ = self(dynamic_cast<ast::StatementContext*>(children[++i]));
+            break;
+
+          default:
+            break;
+        }
+  }
+  return ret;
 }
 
 CompoundStmt*

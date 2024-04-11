@@ -46,6 +46,12 @@ public:
 
   Expr* operator()(ast::MultiplicativeExpressionContext* ctx);
 
+  Expr* operator()(ast::LogicExpressionContext* ctx);
+
+  Expr* operator()(ast::ConditionExpressionContext* ctx);
+
+  Expr* operator()(ast::ArrayExpressionContext* ctx);
+
   Expr* operator()(ast::ParenExpressionContext* ctx);
 
   Expr* operator()(ast::UnaryExpressionContext* ctx);
@@ -67,6 +73,8 @@ public:
   Stmt* operator()(ast::ExpressionStatementContext* ctx);
 
   Stmt* operator()(ast::JumpStatementContext* ctx);
+
+  Stmt* operator()(ast::IfStatementContext* ctx);
 
   //============================================================================
   // 声明
