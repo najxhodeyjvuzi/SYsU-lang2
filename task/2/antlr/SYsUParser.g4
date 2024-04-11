@@ -9,9 +9,18 @@ arrayExpression
     |   Identifier
     ;
 
+argumentList
+    :   assignmentExpression (Comma assignmentExpression)*
+    ;
+
+funcCaller
+    :   Identifier LeftParen argumentList? RightParen
+    ;
+
 primaryExpression
     :   arrayExpression
     |   Constant
+    |   funcCaller
     ;
 
 postfixExpression
@@ -90,6 +99,7 @@ initDeclarator
 typeSpecifier
     :   Int
     |   Const Int
+    |   Void
     ;
 
 
@@ -165,7 +175,11 @@ externalDeclaration
     |   declaration
     ;
 
+funcDeclaration
+    :   declarationSpecifiers initDeclarator (Comma declarationSpecifiers initDeclarator)*
+    ;
+
 functionDefinition
-    : declarationSpecifiers directDeclarator LeftParen RightParen compoundStatement
+    : declarationSpecifiers directDeclarator LeftParen funcDeclaration? RightParen (compoundStatement|Semi)
     ;
 

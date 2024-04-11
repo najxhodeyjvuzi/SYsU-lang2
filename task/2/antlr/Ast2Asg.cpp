@@ -81,6 +81,8 @@ Ast2Asg::operator()(ast::DeclarationSpecifiersContext* ctx)
       if (ret.first == Type::Spec::kINVALID) {
         if (p->Int())
           ret.first = Type::Spec::kInt;
+        else if (p->Void())
+          ret.first = Type::Spec::kVoid;
         else
           ABORT(); // 未知的类型说明符
       }
@@ -208,6 +210,27 @@ Ast2Asg::operator()(ast::ExpressionContext* ctx)
   }
 
   return ret;
+}
+
+Expr* Ast2Asg::operator()(ast::FuncCallerContext* ctx) {
+
+  auto ret = make<CallExpr>();
+
+  if (auto p = ctx->Identifier()) {
+    auto name = p->getText();
+    auto head = make<DeclRefExpr>();
+    head->decl = mSymtbl->resolve(name);
+    ret->head = head;
+  }
+
+  if (auto p = ctx -> argumentList()) {
+    for (auto &&i : p->assignmentExpression()) {
+      ret->args.push_back(self(i));
+    }
+    
+  }
+  return ret;
+
 }
 
 Expr*
@@ -471,6 +494,10 @@ Ast2Asg::operator()(ast::PrimaryExpressionContext* ctx)
   //   return ret;
   // }
 
+  if (auto p = ctx -> funcCaller()) {
+    return self(p);
+  }
+
   if (auto p = ctx->Constant()) {
     auto text = p->getText();
 
@@ -666,7 +693,18 @@ Ast2Asg::operator()(ast::FunctionDefinitionContext* ctx)
   // 函数定义在签名之后就加入符号表，以允许递归调用
   (*mSymtbl)[ret->name] = ret;
 
-  ret->body = self(ctx->compoundStatement());
+  if (auto p = ctx->funcDeclaration()) {
+
+    auto children = p->children;
+    for (auto i =0; i<children.size(); i+=3) {
+        auto specs = self(dynamic_cast<ast::DeclarationSpecifiersContext*>(children[i]));
+        ret->params.push_back(self(dynamic_cast<ast::InitDeclaratorContext*>(children[i+1]), specs));
+    }
+  }
+
+  if (auto p = ctx -> compoundStatement()) {
+    ret->body = self(p);
+  }
 
   return ret;
 }
