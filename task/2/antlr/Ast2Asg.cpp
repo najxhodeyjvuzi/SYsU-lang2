@@ -554,6 +554,9 @@ Stmt*
 Ast2Asg::operator()(ast::StatementContext* ctx)
 {
 
+  if (auto p = ctx->whileStatement())
+    return self(p);
+
   if (auto p = ctx->ifStatement())
     return self(p);
 
@@ -589,6 +592,31 @@ Stmt* Ast2Asg::operator()(ast::IfStatementContext* ctx) {
 
           case ast::Else:
             ret->else_ = self(dynamic_cast<ast::StatementContext*>(children[++i]));
+            break;
+
+          default:
+            break;
+        }
+  }
+  return ret;
+}
+
+Stmt* Ast2Asg::operator()(ast::WhileStatementContext* ctx) {
+  auto ret = make<WhileStmt>();
+
+  auto children = ctx->children;
+
+  for (auto i = 0; i<children.size(); i++) {
+    auto token = dynamic_cast<antlr4::tree::TerminalNode*>(children[i])
+                      ->getSymbol()
+                      ->getType();
+        switch (token) {
+          case ast::LeftParen:
+            ret->cond = self(dynamic_cast<ast::AssignmentExpressionContext*>(children[++i]));
+            break;
+
+          case ast::RightParen:
+            ret->body = self(dynamic_cast<ast::StatementContext*>(children[++i]));
             break;
 
           default:

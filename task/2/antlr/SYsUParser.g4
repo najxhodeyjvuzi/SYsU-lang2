@@ -131,11 +131,16 @@ ifStatement
     :   If LeftParen assignmentExpression RightParen statement (Else statement)?
     ;
 
+whileStatement
+    :   While LeftParen assignmentExpression RightParen statement
+    ;
+
 statement
     :   compoundStatement
     |   expressionStatement
     |   jumpStatement
     |   ifStatement
+    |   whileStatement
     ;
 
 compoundStatement
@@ -158,8 +163,7 @@ expressionStatement
 
 
 jumpStatement
-    :   (Return expression?)
-    Semi
+    :   (Return expression?) Semi
     ;
 
 compilationUnit
