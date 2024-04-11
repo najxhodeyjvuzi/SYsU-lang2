@@ -30,7 +30,7 @@ postfixExpression
 unaryExpression
     :
     (postfixExpression
-    |   unaryOperator unaryExpression
+    |   unaryOperator parenExpression
     )
     ;
 
@@ -54,18 +54,28 @@ additiveExpression
     ;
 
 
-conditionExpression
-    :   conditionExpression (Exclaimequal|Equalequal|Less|Lessequal|Greater|Greaterequal) additiveExpression
+conditionComparationExpression
+    :   conditionComparationExpression (Less|Lessequal|Greater|Greaterequal) additiveExpression
     |   additiveExpression
     ;
 
-logicExpression
-    :   logicExpression (Ampamp|Pipepipe) conditionExpression
-    |   conditionExpression
+conditionEqualityExpression
+    :   conditionEqualityExpression (Exclaimequal|Equalequal) conditionComparationExpression
+    |   conditionComparationExpression
+    ;
+
+logicOrExpression
+    :   logicOrExpression Pipepipe logicAndExpression
+    |   logicAndExpression
+    ;
+
+logicAndExpression
+    :   logicAndExpression Ampamp conditionEqualityExpression
+    |   conditionEqualityExpression
     ;
 
 assignmentExpression
-    :   logicExpression
+    :   logicOrExpression
     // :   additiveExpression
     |   unaryExpression Equal assignmentExpression
     ;

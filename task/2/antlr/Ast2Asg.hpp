@@ -46,9 +46,13 @@ public:
 
   Expr* operator()(ast::MultiplicativeExpressionContext* ctx);
 
-  Expr* operator()(ast::LogicExpressionContext* ctx);
+  Expr* operator()(ast::LogicAndExpressionContext* ctx);
 
-  Expr* operator()(ast::ConditionExpressionContext* ctx);
+  Expr* operator()(ast::LogicOrExpressionContext* ctx);
+
+  Expr* operator()(ast::ConditionEqualityExpressionContext* ctx);
+
+  Expr* operator()(ast::ConditionComparationExpressionContext* ctx);
 
   Expr* operator()(ast::ArrayExpressionContext* ctx);
 

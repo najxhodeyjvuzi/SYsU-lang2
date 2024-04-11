@@ -240,7 +240,7 @@ Expr*
 Ast2Asg::operator()(ast::AssignmentExpressionContext* ctx)
 {
   // if (auto p = ctx->additiveExpression())
-  if (auto p = ctx->logicExpression())
+  if (auto p = ctx->logicOrExpression())
     return self(p);
 
   auto ret = make<BinaryExpr>();
@@ -250,13 +250,13 @@ Ast2Asg::operator()(ast::AssignmentExpressionContext* ctx)
   return ret;
 }
 Expr*
-Ast2Asg::operator()(ast::ConditionExpressionContext* ctx)
+Ast2Asg::operator()(ast::ConditionComparationExpressionContext* ctx)
 {
   auto children = ctx->children;
   if (children.size() == 1)
     return self(dynamic_cast<ast::AdditiveExpressionContext*>(children[0]));
 
-  Expr* ret = self(dynamic_cast<ast::ConditionExpressionContext*>(children[0]));
+  Expr* ret = self(dynamic_cast<ast::ConditionComparationExpressionContext*>(children[0]));
 
   for (unsigned i = 1; i < children.size(); ++i) {
     auto node = make<BinaryExpr>();
@@ -265,9 +265,6 @@ Ast2Asg::operator()(ast::ConditionExpressionContext* ctx)
                    ->getSymbol()
                    ->getType();
     switch (token) {
-      case ast::Equalequal:
-        node->op = node->kEq;
-        break;
 
       case ast::Less:
         node->op = node->kLt;
@@ -285,10 +282,6 @@ Ast2Asg::operator()(ast::ConditionExpressionContext* ctx)
         node->op = node->kGe;
         break;
 
-      case ast::Exclaimequal:
-        node->op = node->kNe;
-        break;
-
       default:
         ABORT();
     }
@@ -301,14 +294,85 @@ Ast2Asg::operator()(ast::ConditionExpressionContext* ctx)
 
   return ret;
 }
-Expr*
-Ast2Asg::operator()(ast::LogicExpressionContext* ctx)
+
+
+Expr* Ast2Asg::operator()(ast::ConditionEqualityExpressionContext* ctx)
 {
   auto children = ctx->children;
   if (children.size() == 1)
-    return self(dynamic_cast<ast::ConditionExpressionContext*>(children[0]));
+    return self(dynamic_cast<ast::ConditionComparationExpressionContext*>(children[0]));
 
-  Expr* ret = self(dynamic_cast<ast::LogicExpressionContext*>(children[0]));
+  Expr* ret = self(dynamic_cast<ast::ConditionEqualityExpressionContext*>(children[0]));
+
+  for (unsigned i = 1; i < children.size(); ++i) {
+    auto node = make<BinaryExpr>();
+
+    auto token = dynamic_cast<antlr4::tree::TerminalNode*>(children[i])
+                   ->getSymbol()
+                   ->getType();
+    switch (token) {
+      case ast::Exclaimequal:
+        node->op = node->kNe;
+        break;
+
+      case ast::Equalequal:
+        node->op = node->kEq;
+        break;
+
+      default:
+        ABORT();
+    }
+
+    node->lft = ret;
+    node->rht =
+      self(dynamic_cast<ast::ConditionComparationExpressionContext*>(children[++i]));
+    ret = node;
+  }
+
+  return ret;
+}
+
+Expr*
+Ast2Asg::operator()(ast::LogicOrExpressionContext* ctx)
+{
+  auto children = ctx->children;
+  if (children.size() == 1)
+    return self(dynamic_cast<ast::LogicAndExpressionContext*>(children[0]));
+
+  Expr* ret = self(dynamic_cast<ast::LogicOrExpressionContext*>(children[0]));
+
+  for (unsigned i = 1; i < children.size(); ++i) {
+    auto node = make<BinaryExpr>();
+
+    auto token = dynamic_cast<antlr4::tree::TerminalNode*>(children[i])
+                   ->getSymbol()
+                   ->getType();
+    switch (token) {
+      case ast::Pipepipe:
+        node->op = node->kOr;
+        break;
+
+      default:
+        ABORT();
+    }
+
+    node->lft = ret;
+    node->rht =
+      self(dynamic_cast<ast::LogicAndExpressionContext*>(children[++i]));
+    ret = node;
+  }
+
+  return ret;
+}
+
+Expr*
+Ast2Asg::operator()(ast::LogicAndExpressionContext* ctx)
+{
+  auto children = ctx->children;
+  if (children.size() == 1)
+    return self(dynamic_cast<ast::ConditionEqualityExpressionContext*>(children[0]));
+
+  Expr* ret = self(dynamic_cast<ast::LogicAndExpressionContext*>(children[0]));
 
   for (unsigned i = 1; i < children.size(); ++i) {
     auto node = make<BinaryExpr>();
@@ -321,17 +385,13 @@ Ast2Asg::operator()(ast::LogicExpressionContext* ctx)
         node->op = node->kAnd;
         break;
 
-      case ast::Pipepipe:
-        node->op = node->kOr;
-        break;
-
       default:
         ABORT();
     }
 
     node->lft = ret;
     node->rht =
-      self(dynamic_cast<ast::ConditionExpressionContext*>(children[++i]));
+      self(dynamic_cast<ast::ConditionEqualityExpressionContext*>(children[++i]));
     ret = node;
   }
 
@@ -457,7 +517,7 @@ Ast2Asg::operator()(ast::UnaryExpressionContext* ctx)
       ABORT();
   }
 
-  ret->sub = self(ctx->unaryExpression());
+  ret->sub = self(ctx->parenExpression());
 
   return ret;
 }
