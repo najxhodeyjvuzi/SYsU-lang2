@@ -80,6 +80,10 @@ public:
 
   Stmt* operator()(ast::WhileStatementContext* ctx);
 
+  Stmt* operator()(ast::BreakStatementContext* ctx);
+
+  Stmt* operator()(ast::ContinueStatementContext* ctx);
+
   //============================================================================
   // 声明
   //============================================================================

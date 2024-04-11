@@ -35,7 +35,7 @@ unaryExpression
     ;
 
 unaryOperator
-    :   Plus | Minus
+    :   Plus | Minus | Exclaim
     ;
 
 parenExpression
@@ -141,6 +141,8 @@ statement
     |   jumpStatement
     |   ifStatement
     |   whileStatement
+    |   breakStatement
+    |   continueStatement
     ;
 
 compoundStatement
@@ -160,6 +162,11 @@ expressionStatement
     :   expression? Semi
     ;
 
+breakStatement
+    :   Break Semi;
+
+continueStatement
+    :   Continue Semi;
 
 
 jumpStatement
