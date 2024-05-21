@@ -46,6 +46,8 @@ private:
 
   llvm::Value* operator()(asg::ParenExpr* obj);
 
+  llvm::Value* operator()(asg::CallExpr* obj);
+
   // TODO: 添加表达式处理相关声明
 
   //============================================================================
@@ -68,7 +70,7 @@ private:
   // 声明
   //============================================================================
 
-  void transInit(llvm::Value *dst, asg::Expr *src);
+  void transInit(llvm::Value *dst, asg::Expr *src, asg::VarDecl *obj);
 
   void operator()(asg::VarDecl* obj);
 

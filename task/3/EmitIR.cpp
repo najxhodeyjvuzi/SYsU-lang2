@@ -1,5 +1,8 @@
 #include "EmitIR.hpp"
+#include <stack>
+#include <iostream>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
+#include <llvm/IR/ValueSymbolTable.h>
 
 #define self (*this)
 
@@ -54,6 +57,8 @@ EmitIR::operator()(const Type* type)
       case Type::Spec::kInt:
         return llvm::Type::getInt32Ty(mCtx);
       // TODO: 在此添加对更多基础类型的处理
+      case Type::Spec::kVoid:
+        return llvm::Type::getVoidTy(mCtx);
       default:
         ABORT();
     }
@@ -66,9 +71,21 @@ EmitIR::operator()(const Type* type)
 
   // TODO: 在此添加对指针类型、数组类型和函数类型的处理
 
+  if (auto p = type->texp->dcst<PointerType>()) {
+    return self(&subt)->getPointerTo();
+  }
+
+  if (auto p = type->texp->dcst<ArrayType>()) {
+    if (p->len == ArrayType::kUnLen)
+      return self(&subt)->getPointerTo();
+    return llvm::ArrayType::get(self(&subt), p->len);
+  }
+
   if (auto p = type->texp->dcst<FunctionType>()) {
     std::vector<llvm::Type*> pty;
     // TODO: 在此添加对函数参数类型的处理
+    for (auto &param : p->params)
+      pty.push_back(self(param));
     return llvm::FunctionType::get(self(&subt), std::move(pty), false);
   }
 
@@ -99,6 +116,9 @@ EmitIR::operator()(Expr* obj)
     return self(p);
 
   if (auto p = obj->dcst<ParenExpr>())
+    return self(p);
+
+  if (auto p = obj->dcst<CallExpr>())
     return self(p);
 
   ABORT();
@@ -167,6 +187,11 @@ llvm::Value* EmitIR::operator()(BinaryExpr* obj) {
       return rht;
     case BinaryExpr::Op::kAssign:
       return irb.CreateStore(rht, lft);
+    case BinaryExpr::Op::kIndex:{
+      auto type = self(obj->type);
+      return irb.CreateInBoundsGEP(type, lft, rht);
+    }
+     
     default:
       ABORT();
   }
@@ -185,13 +210,46 @@ llvm::Value* EmitIR::operator()(ImplicitCastExpr* obj) {
     case ImplicitCastExpr::kIntegralCast:{
       return irb.CreateIntCast(sub, self(obj->sub->type), true);
     }
+    case ImplicitCastExpr::kArrayToPointerDecay:{
+      auto type = self(obj->sub->type);
+      return irb.CreateInBoundsGEP(type, sub, {irb.getInt64(0)});
+    }
+    case ImplicitCastExpr::kFunctionToPointerDecay:
+      return sub;
     default:
       ABORT();
   }
 }
 
 llvm::Value* EmitIR::operator()(DeclRefExpr* obj) {
-  return reinterpret_cast<llvm::Value*>(obj->decl->any);
+  // return reinterpret_cast<llvm::Value*>(obj->decl->any);
+
+  auto name = obj->decl->name;
+  auto type = self(obj->decl->type);
+  // 先查看局部遮掩的符号
+  if (auto p = mCurFunc->getValueSymbolTable()->lookup(name)) {
+    return p;
+  }
+
+  if (auto p = mMod.getGlobalVariable(name)) {
+    return p;
+  }
+
+  if (auto p = mMod.getFunction(name)) {
+    return p;
+  }
+}
+
+llvm::Value* EmitIR::operator()(CallExpr* obj) {
+  auto &irb = *mCurIrb;
+
+  auto func = reinterpret_cast<llvm::Function*>(self(obj->head));
+  std::vector<llvm::Value*> params;
+  for (int iter = 0; iter < obj->args.size(); iter++) {
+    params.push_back(self(obj->args[iter]));
+  }
+  return irb.CreateCall(func,params);
+
 }
 
 //==============================================================================
@@ -266,11 +324,90 @@ EmitIR::operator()(ReturnStmt* obj)
 // 声明
 //==============================================================================
 
-void EmitIR::transInit(llvm::Value* dst, Expr* src) {
+struct element {
+  InitListExpr* initList;
+  llvm::Type* type;
+  llvm::Value* dst;
+};
+
+void EmitIR::transInit(llvm::Value* dst, Expr* src, VarDecl* obj) {
   auto& irb = *mCurIrb;
 
   if (auto p = src->dcst<IntegerLiteral>()) {
     auto initVal = llvm::ConstantInt::get(self(p->type), p->val);
+    irb.CreateStore(initVal, dst);
+    return;
+  }
+  if (auto p = src->dcst<InitListExpr>()) {
+    std::stack<element> stack;
+    stack.push({p, self(obj->type), dst});
+
+    while (!stack.empty()) {
+      auto element = stack.top();
+      stack.pop();
+      auto type = element.type;
+      auto initList = element.initList;
+      auto dst = element.dst;
+
+      for (int i = type->getArrayNumElements()-1; i>=0; i--) {
+        int listsize = initList->list.size();
+        if (i < initList->list.size()) {
+          auto sub = initList->list[i];
+          auto subDst = irb.CreateInBoundsGEP(type, dst, {irb.getInt64(0), irb.getInt64(i)});
+          if (auto p = sub->dcst<InitListExpr>()) {
+            stack.push({p,type->getArrayElementType() ,subDst});
+          } else {
+            transInit(subDst, sub, obj);
+          }
+        }
+        else {
+          auto initVal = llvm::Constant::getNullValue(type->getArrayElementType());
+          auto subDst = irb.CreateInBoundsGEP(type, dst, {irb.getInt64(0), irb.getInt64(i)});
+          irb.CreateStore(initVal, subDst);
+        }
+      }
+    }
+    return;
+  }
+
+  if (auto p = src->dcst<ImplicitInitExpr>()) {
+    auto initVal = llvm::Constant::getNullValue(self(obj->type));
+    irb.CreateStore(initVal, dst);
+    return;
+  }
+
+  if (auto p = src->dcst<ImplicitCastExpr>()) {
+    auto initVal = self(p);
+    irb.CreateStore(initVal, dst);
+    return;
+  }
+
+  if (auto p = src->dcst<UnaryExpr>()) {
+    auto initVal = self(p);
+    irb.CreateStore(initVal, dst);
+    return;
+  }
+
+  if (auto p = src->dcst<ParenExpr>()) {
+    auto initVal = self(p);
+    irb.CreateStore(initVal, dst);
+    return;
+  }
+
+  if (auto p = src->dcst<BinaryExpr>()) {
+    auto initVal = self(p);
+    irb.CreateStore(initVal, dst);
+    return;
+  }
+
+  if (auto p = src->dcst<DeclRefExpr>()) {
+      auto initVal = self(p);
+      irb.CreateStore(initVal, dst);
+      return;
+  }
+
+  if (auto p = src->dcst<CallExpr>()) {
+    auto initVal = self(p);
     irb.CreateStore(initVal, dst);
     return;
   }
@@ -298,8 +435,10 @@ void EmitIR::operator()(VarDecl* obj) {
 
     if (obj->init == nullptr)
       return;
-    
-    transInit(alloca, obj->init);
+    if (obj->init) 
+      transInit(alloca, obj->init,obj);
+    else
+      mCurIrb->CreateStore(llvm::Constant::getNullValue(type), alloca);
     return;
   }
 
@@ -334,7 +473,7 @@ void EmitIR::operator()(VarDecl* obj) {
   // IRBuilder的参数是一个BasicBlock，表示在这个BasicBlock中生成IR
   mCurIrb = std::make_unique<llvm::IRBuilder<>>(entryBb);
   // transinit的作用是：将一个表达式的值赋给一个变量
-  transInit(gvar, obj->init);
+  transInit(gvar, obj->init,obj);
   mCurIrb->CreateRet(nullptr);
   mCurFunc = preFunc;
   return;
@@ -346,10 +485,20 @@ EmitIR::operator()(FunctionDecl* obj)
 {
   // 创建函数
   auto fty = llvm::dyn_cast<llvm::FunctionType>(self(obj->type));
-  auto func = llvm::Function::Create(
-    fty, llvm::GlobalVariable::ExternalLinkage, obj->name, mMod);
+  std::string testName = obj->name;
+  // std::cout<<"test-----cout:"<<testName<<std::endl;
+  auto func = llvm::Function::Create(fty, llvm::GlobalVariable::ExternalLinkage, obj->name, mMod);
 
+  // std::cout<<"test-----cout:"<<func<<std::endl;
   obj->any = func;
+
+  // if (fty) {
+  //   fty->getReturnType()->print(llvm::errs());
+  //   llvm::errs()<<'\n';
+  //   for (auto& paramType:fty->params()) {
+  //     paramType->print(llvm::errs());
+  //   }
+  // }
 
   if (obj->body == nullptr)
     return;
@@ -358,6 +507,17 @@ EmitIR::operator()(FunctionDecl* obj)
   auto& entryIrb = *mCurIrb;
 
   // TODO: 添加对函数参数的处理
+
+  auto argIter = func->arg_begin();
+  
+  // std::cout<<"test-----cout:"<<argIter<<std::endl;
+  for (int i = 0; i < obj->params.size(); i++) {
+    auto param = obj->params[i];
+    auto paramVar = mCurIrb->CreateAlloca(self(param->type), nullptr, param->name);
+    argIter->setName(param->name);
+    entryIrb.CreateStore(argIter,paramVar);
+    argIter++;
+  }
 
   // 翻译函数体
   mCurFunc = func;
@@ -369,3 +529,5 @@ EmitIR::operator()(FunctionDecl* obj)
   else
     exitIrb.CreateUnreachable();
 }
+
+
