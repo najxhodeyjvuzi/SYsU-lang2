@@ -191,7 +191,12 @@ llvm::Value* EmitIR::operator()(BinaryExpr* obj) {
       auto type = self(obj->type);
       return irb.CreateInBoundsGEP(type, lft, rht);
     }
-     
+
+    case BinaryExpr::Op::kOr: 
+      return irb.CreateOr(lft, rht);
+    case BinaryExpr::Op::kAnd: 
+      return irb.CreateAnd(lft, rht);
+    
     default:
       ABORT();
   }
@@ -276,11 +281,95 @@ EmitIR::operator()(Stmt* obj)
 
   if (auto p = obj->dcst<ExprStmt>())
     return self(p);
+  
+  if (auto p = obj->dcst<IfStmt>()) 
+    return self(p);
+
+  if (auto p = obj->dcst<WhileStmt>())
+    return self(p);
+  
+  if (auto p = obj->dcst<DoStmt>())
+    return self(p);
+  
+  if (auto p = obj->dcst<BreakStmt>())
+    return self(p);
+  
+  if (auto p = obj->dcst<ContinueStmt>())
+    return self(p);
+  
+  if (auto p = obj->dcst<ReturnStmt>())
+    return self(p);
 
   ABORT();
 }
 
 // TODO: 在此添加对更多Stmt类型的处理
+
+void EmitIR::operator()(ContinueStmt* obj) {
+  auto &irb = *mCurIrb;
+  if (obj->loop->any==nullptr) {
+    ABORT();
+  }
+  auto jump = reinterpret_cast<llvm::BasicBlock*>(obj->loop->any)->getPrevNode();
+  irb.CreateBr(jump);
+}
+
+void EmitIR::operator()(BreakStmt* obj) {
+  auto &irb = *mCurIrb;
+  auto jump = reinterpret_cast<llvm::BasicBlock*>(obj->loop->any)->getNextNode();
+  irb.CreateBr(jump);
+}
+
+void EmitIR::operator()(WhileStmt* obj) {
+  auto &irb = *mCurIrb;
+
+  auto condBb = llvm::BasicBlock::Create(mCtx, "cond", mCurFunc);
+  auto bodyBb = llvm::BasicBlock::Create(mCtx, "body", mCurFunc);
+  auto exitBb = llvm::BasicBlock::Create(mCtx, "exit", mCurFunc);
+
+  irb.CreateBr(condBb);
+
+  mCurIrb = std::make_unique<llvm::IRBuilder<>>(condBb);
+  auto cond = self(obj->cond);
+  if (mCurIrb->GetInsertBlock()->getTerminator() == nullptr)
+    mCurIrb->CreateCondBr(cond, bodyBb, exitBb);
+
+  mCurIrb = std::make_unique<llvm::IRBuilder<>>(bodyBb);
+  self(obj->body);
+  if (mCurIrb->GetInsertBlock()->getTerminator() == nullptr)
+    mCurIrb->CreateBr(condBb);
+
+  mCurIrb = std::make_unique<llvm::IRBuilder<>>(exitBb);
+
+}
+
+void EmitIR::operator()(IfStmt* obj) {
+  auto &irb = *mCurIrb;
+
+  auto cond = self(obj->cond);
+  auto thenBb = llvm::BasicBlock::Create(mCtx, "then", mCurFunc);
+  auto elseBb = llvm::BasicBlock::Create(mCtx, "else", mCurFunc);
+  auto exitBb = llvm::BasicBlock::Create(mCtx, "exit", mCurFunc);
+
+  irb.CreateCondBr(cond, thenBb, elseBb);
+
+  mCurIrb = std::make_unique<llvm::IRBuilder<>>(thenBb);
+  if (obj->then) {
+    self(obj->then);
+  }
+  if (mCurIrb->GetInsertBlock()->getTerminator() == nullptr)
+    mCurIrb->CreateBr(exitBb);
+
+
+  mCurIrb = std::make_unique<llvm::IRBuilder<>>(elseBb);
+  if (obj->else_) {
+    self(obj->else_);
+  }
+  if (mCurIrb->GetInsertBlock()->getTerminator() == nullptr)
+    mCurIrb->CreateBr(exitBb);
+
+  mCurIrb = std::make_unique<llvm::IRBuilder<>>(exitBb);
+}
 
 void
 EmitIR::operator()(ExprStmt* obj)

@@ -64,6 +64,14 @@ private:
 
   void operator()(asg::ReturnStmt* obj);
 
+  void operator()(asg::IfStmt* obj);
+
+  void operator()(asg::WhileStmt* obj);
+
+  void operator()(asg::BreakStmt* obj);
+
+  void operator()(asg::ContinueStmt* obj);
+
   // TODO: 添加语句处理相关声明
 
   //============================================================================
