@@ -146,8 +146,10 @@ llvm::Value* EmitIR::operator()(UnaryExpr* obj) {
       return sub;
     case UnaryExpr::Op::kNeg:
       return irb.CreateNeg(sub);
-    case UnaryExpr::Op::kNot:
-      return irb.CreateNot(sub);
+    case UnaryExpr::Op::kNot: {
+      llvm::Value* toBool = sub->getType()->isIntegerTy(1) ? sub : irb.CreateICmpNE(sub, llvm::Constant::getNullValue(sub->getType()));
+      return irb.CreateNot(toBool);
+    }
     default:
       ABORT();
   }
@@ -158,9 +160,23 @@ llvm::Value* EmitIR::operator()(BinaryExpr* obj) {
   auto& irb = *mCurIrb;
 
   auto lft = self(obj->lft);
-  auto rht = self(obj->rht);
 
   switch (obj->op) {
+    case BinaryExpr::Op::kOr: {
+
+      auto rht = self(obj->rht);
+      return irb.CreateOr(lft, rht);
+
+    }
+
+    case BinaryExpr::Op::kAnd: {
+      auto rht = self(obj->rht);
+      return irb.CreateAnd(lft, rht);
+    }    
+  }
+  auto rht = self(obj->rht);
+  switch (obj->op)
+  {
     case BinaryExpr::Op::kAdd:
       return irb.CreateAdd(lft, rht);
     case BinaryExpr::Op::kSub:
@@ -191,15 +207,9 @@ llvm::Value* EmitIR::operator()(BinaryExpr* obj) {
       auto type = self(obj->type);
       return irb.CreateInBoundsGEP(type, lft, rht);
     }
-
-    case BinaryExpr::Op::kOr: 
-      return irb.CreateOr(lft, rht);
-    case BinaryExpr::Op::kAnd: 
-      return irb.CreateAnd(lft, rht);
-    
     default:
       ABORT();
-  }
+    }
 }
 
 llvm::Value* EmitIR::operator()(ImplicitCastExpr* obj) {
@@ -300,16 +310,20 @@ EmitIR::operator()(Stmt* obj)
   if (auto p = obj->dcst<ReturnStmt>())
     return self(p);
 
+  if (auto p = obj->dcst<NullStmt>())
+    return self(p);
+
   ABORT();
 }
 
 // TODO: 在此添加对更多Stmt类型的处理
 
+void EmitIR::operator()(NullStmt* obj){
+  return;
+}
+
 void EmitIR::operator()(ContinueStmt* obj) {
   auto &irb = *mCurIrb;
-  if (obj->loop->any==nullptr) {
-    ABORT();
-  }
   auto jump = reinterpret_cast<llvm::BasicBlock*>(obj->loop->any)->getPrevNode();
   irb.CreateBr(jump);
 }
@@ -326,7 +340,7 @@ void EmitIR::operator()(WhileStmt* obj) {
   auto condBb = llvm::BasicBlock::Create(mCtx, "cond", mCurFunc);
   auto bodyBb = llvm::BasicBlock::Create(mCtx, "body", mCurFunc);
   auto exitBb = llvm::BasicBlock::Create(mCtx, "exit", mCurFunc);
-
+  obj->any = bodyBb;
   irb.CreateBr(condBb);
 
   mCurIrb = std::make_unique<llvm::IRBuilder<>>(condBb);

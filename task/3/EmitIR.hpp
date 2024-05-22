@@ -72,6 +72,8 @@ private:
 
   void operator()(asg::ContinueStmt* obj);
 
+  void operator()(asg::NullStmt* obj);
+
   // TODO: 添加语句处理相关声明
 
   //============================================================================
@@ -79,6 +81,8 @@ private:
   //============================================================================
 
   void transInit(llvm::Value *dst, asg::Expr *src, asg::VarDecl *obj);
+
+  void varInit(llvm::Type*type , llvm::Value* var, asg::Expr* obj);
 
   void operator()(asg::VarDecl* obj);
 
