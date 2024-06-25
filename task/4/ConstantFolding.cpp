@@ -1,5 +1,5 @@
 #include "ConstantFolding.hpp"
-
+#include <set>
 using namespace llvm;
 
 PreservedAnalyses
@@ -7,11 +7,11 @@ ConstantFolding::run(Module& mod, ModuleAnalysisManager& mam)
 {
   int constFoldTimes = 0;
 
+  std::set<Instruction*> instToErase;
   // 遍历所有函数
   for (auto& func : mod) {
     // 遍历每个函数的基本块
     for (auto& bb : func) {
-      std::vector<Instruction*> instToErase;
       // 遍历每个基本块的指令
       for (auto& inst : bb) {
         // 判断当前指令是否是二元运算指令
@@ -28,7 +28,7 @@ ConstantFolding::run(Module& mod, ModuleAnalysisManager& mam)
                 binOp->replaceAllUsesWith(ConstantInt::getSigned(
                   binOp->getType(),
                   constLhs->getSExtValue() + constRhs->getSExtValue()));
-                instToErase.push_back(binOp);
+                instToErase.insert(binOp);
                 ++constFoldTimes;
               }
               break;
@@ -38,7 +38,7 @@ ConstantFolding::run(Module& mod, ModuleAnalysisManager& mam)
                 binOp->replaceAllUsesWith(ConstantInt::getSigned(
                   binOp->getType(),
                   constLhs->getSExtValue() - constRhs->getSExtValue()));
-                instToErase.push_back(binOp);
+                instToErase.insert(binOp);
                 ++constFoldTimes;
               }
               break;
@@ -48,18 +48,18 @@ ConstantFolding::run(Module& mod, ModuleAnalysisManager& mam)
                 binOp->replaceAllUsesWith(ConstantInt::getSigned(
                   binOp->getType(),
                   constLhs->getSExtValue() * constRhs->getSExtValue()));
-                instToErase.push_back(binOp);
+                instToErase.insert(binOp);
                 ++constFoldTimes;
               }
               break;
             }
             case Instruction::UDiv:
             case Instruction::SDiv: {
-              if (constLhs && constRhs && constRhs->getSExtValue()!=0) {
+              if (constLhs && constRhs && constRhs->getSExtValue() != 0) {
                 binOp->replaceAllUsesWith(ConstantInt::getSigned(
                   binOp->getType(),
                   constLhs->getSExtValue() / constRhs->getSExtValue()));
-                instToErase.push_back(binOp);
+                instToErase.insert(binOp);
                 ++constFoldTimes;
               }
               break;
@@ -69,12 +69,12 @@ ConstantFolding::run(Module& mod, ModuleAnalysisManager& mam)
           }
         }
       }
-      // 统一删除被折叠为常量的指令
-      for (Instruction *i : instToErase)
-        i->eraseFromParent();
     }
   }
 
+  // 统一删除被折叠为常量的指令
+  for (Instruction* i : instToErase)
+    i->eraseFromParent();
   mOut << "ConstantFolding running...\nTo eliminate " << constFoldTimes
        << " instructions\n";
   return PreservedAnalyses::all();

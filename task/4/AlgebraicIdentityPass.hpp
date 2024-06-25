@@ -4,10 +4,10 @@
 #include <llvm/IR/PassManager.h>
 #include <llvm/Support/raw_ostream.h>
 
-class AlgebraicIdentities : public llvm::PassInfoMixin<AlgebraicIdentities>
+class AlgebraicIdentityPass : public llvm::PassInfoMixin<AlgebraicIdentityPass>
 {
     public:
-        explicit AlgebraicIdentities(llvm::raw_ostream& out)
+        explicit AlgebraicIdentityPass(llvm::raw_ostream& out)
             : mOut(out)
         {
         }
