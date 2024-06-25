@@ -10,6 +10,11 @@
 #include "Mem2Reg.hpp"
 #include "StaticCallCounter.hpp"
 #include "StaticCallCounterPrinter.hpp"
+#include "DeadInstEliminationPass.hpp"
+#include "PostDominatorTree.hpp"
+#include "StrengthReduction.hpp"
+#include "AlgebraicIdentities.hpp"
+#include "CommonSubexpressionEliminationPass.hpp"
 
 void
 opt(llvm::Module& mod)
@@ -33,11 +38,20 @@ opt(llvm::Module& mod)
 
   // 添加分析pass到管理器中
   mam.registerPass([]() { return StaticCallCounter(); });
+  
+  fam.registerPass([]() { return PostDominatorTree(); });
 
   // 添加优化pass到管理器中
+  // mpm.addPass(DeadCodeEliminationPass(llvm::errs()));
   mpm.addPass(StaticCallCounterPrinter(llvm::errs()));
-  mpm.addPass(Mem2Reg());
+  // mpm.addPass(AlgebraicIdentities(llvm::errs()));
   mpm.addPass(ConstantFolding(llvm::errs()));
+  mpm.addPass(StrengthReduction(llvm::errs()));
+  
+  mpm.addPass(Mem2Reg());
+  
+  mpm.addPass(CommonSubexpressionEliminationPass(llvm::errs()));
+  mpm.addPass(DeadInstEliminationPass(llvm::errs()));
   // 运行优化pass
   mpm.run(mod, mam);
 }

@@ -55,7 +55,7 @@ ConstantFolding::run(Module& mod, ModuleAnalysisManager& mam)
             }
             case Instruction::UDiv:
             case Instruction::SDiv: {
-              if (constLhs && constRhs) {
+              if (constLhs && constRhs && constRhs->getSExtValue()!=0) {
                 binOp->replaceAllUsesWith(ConstantInt::getSigned(
                   binOp->getType(),
                   constLhs->getSExtValue() / constRhs->getSExtValue()));
@@ -70,7 +70,7 @@ ConstantFolding::run(Module& mod, ModuleAnalysisManager& mam)
         }
       }
       // 统一删除被折叠为常量的指令
-      for (auto& i : instToErase)
+      for (Instruction *i : instToErase)
         i->eraseFromParent();
     }
   }
